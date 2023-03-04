@@ -5,25 +5,52 @@ const app = express();
 const { JSDOM } = require("jsdom");
 
 // Trending
-const baseUrl = "https://komiku.id/";
+const baseUrl = "https://komikstation.co";
 
-app.get("/", async (req, res) => {
-  const fethcTrendingDatas = async () => {
-    const responsePages = await fetchPages(baseUrl);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-    const dom = new JSDOM(responsePages).window.document;
-    const results = [];
-    // getting image
-    dom.querySelectorAll("#Trending .ls23").forEach((item) => {
-      results?.push({
-        comicThumbnail: item?.querySelector("img").getAttribute("src"),
-        comicName: item?.querySelector("h4").textContent,
-        url: item?.querySelector("a").getAttribute("href"),
-      });
+const fetchListComics = async (urlListComics) => {
+  const responsePages = await fetchPages(`${baseUrl}${urlListComics}`);
+
+  const dom = new JSDOM(responsePages).window.document;
+  const results = [];
+  // getting image
+  dom.querySelectorAll(".bs").forEach((item) => {
+    results?.push({
+      comicThumbnail: item?.querySelector("img").getAttribute("src"),
+      comicTitle: item?.querySelector(".tt").textContent,
+      comicType: item?.querySelector(".type").textContent,
+      comicTypeLink: `/comic_type/${item
+        ?.querySelector(".type")
+        .textContent.toLowerCase()
+        .trim()}`,
+      comicDetailsLink: item
+        ?.querySelector("a")
+        .getAttribute("href")
+        .replaceAll(baseUrl, ""),
     });
-    return results;
-  };
-  fethcTrendingDatas().then((response) => {
+  });
+  return results;
+};
+
+// fetch list trending pages
+app.get("/", async (req, res) => {
+  fetchListComics("/manga/?order=update").then((response) => {
+    res.send({ status: 200, data: response, message: "Successfully get data" });
+  });
+});
+
+// fetch list genres pages
+app.get("/genres/:genreTypes", async (req, res) => {
+  fetchListComics(`/genres/${req?.params.genreTypes}`).then((response) => {
+    res.send({ status: 200, data: response, message: "Successfully get data" });
+  });
+});
+
+// fetch list comic type
+app.get("/comic_type/:comic_type", async (req, res) => {
+  fetchListComics(`/manga/?type=${req.params.comic_type}`).then((response) => {
     res.send({ status: 200, data: response, message: "Successfully get data" });
   });
 });
@@ -31,7 +58,7 @@ app.get("/", async (req, res) => {
 // Detail Comic
 
 app.get("/manga/:comic_name", async (req, res) => {
-  const url = `${baseUrl}manga/${req?.params?.comic_name}`;
+  const url = `${baseUrl}/manga/${req?.params?.comic_name}`;
 
   const fetchKomikDatas = async () => {
     const responsePages = await fetchPages(url);
@@ -40,47 +67,82 @@ app.get("/manga/:comic_name", async (req, res) => {
     const results = {};
     const genres = [];
     const chapters = [];
+    const recommendedComics = [];
 
-    results["comicTitle"] = {
-      englishTitle: dom.querySelector("#Judul h1").textContent.trim(),
-      indonesiaTitle: dom.querySelector("p").textContent.trim(),
-    };
-    results["synopsis"] = dom
-      .querySelector(".desc")
-      .textContent.trim()
-      .replaceAll("\n", "");
-    results["comicType"] = dom.querySelector(
-      "table tbody tr:nth-child(2) td:nth-child(2)"
-    ).textContent;
-    results["author"] = dom.querySelector(
-      "#Informasi > table > tbody > tr:nth-child(4) > td:nth-child(2)"
-    ).textContent;
-    results["ageMinimum"] = dom.querySelector(
-      "#Informasi > table > tbody > tr:nth-child(6) > td:nth-child(2)"
+    results["comicTitle"] = dom.querySelector(
+      "li[itemprop=itemListElement]:nth-child(2) span[itemprop=name]"
     ).textContent;
 
-    dom.querySelectorAll(".genre li").forEach((item) => {
-      genres.push(item?.querySelector("a").textContent);
-    });
+    results["comicThumbnail"] = dom
+      .querySelector(".thumb img")
+      .getAttribute("src");
 
-    const arrDaftarChapterDOM = dom.querySelectorAll("#Daftar_Chapter tr");
-    for (let i = 1; i < arrDaftarChapterDOM?.length; i++) {
-      chapters?.push({
-        chapterNum: arrDaftarChapterDOM?.[i]
-          ?.querySelector(".judulseries")
-          .textContent.trim(),
-        chapterDate: arrDaftarChapterDOM?.[i]
-          ?.querySelector(".tanggalseries")
-          .textContent.trim(),
-        chapterLink: arrDaftarChapterDOM?.[i]
-          ?.querySelector("a")
+    results["comicDescription"] = dom
+      .querySelector("div[itemprop=description] p")
+      .textContent.trim();
+
+    results["comicStatus"] = dom
+      .querySelectorAll(".tsinfo .imptdt")[0]
+      .querySelector("i").textContent;
+
+    // results["comicType"] = dom
+    //   .querySelectorAll(".tsinfo .imptdt")[1]
+    //   .querySelector("a").textContent;
+    console.log("sdasd : ", dom.querySelectorAll(".tsinfo .imptdt")[1]);
+    // results["comicTypeLink"] = `/comic_type/${
+    //   dom.querySelector(".tsinfo .imptdt:nth-child(2) a").textContent
+    // }`;
+
+    const genresDOM = dom.querySelectorAll(".mgen a");
+    for (let i = 0; i < genresDOM.length; i++) {
+      genres.push({
+        genreName: genresDOM[i].textContent,
+        genreLink: genresDOM[i].getAttribute("href").replaceAll(baseUrl, ""),
+      });
+    }
+    results["comicGenres"] = genres;
+
+    const chaptersDOM = dom.querySelectorAll("#chapterlist li");
+    for (let i = 0; i < chaptersDOM.length; i++) {
+      chapters.push({
+        chapterName: chaptersDOM[i]?.querySelector(".chapternum").textContent,
+        chapterDate: chaptersDOM[i]?.querySelector(".chapterdate").textContent,
+        chapterLink: `/read${chaptersDOM[i]
+          ?.querySelector(".eph-num a")
+          .getAttribute("href")
+          .replaceAll(baseUrl, "")}`,
+        chapterDownloadLink: chaptersDOM[i]
+          ?.querySelector(".dt a")
           .getAttribute("href"),
       });
     }
+    results["comicChapters"] = chapters;
 
-    results["genres"] = genres;
+    dom.querySelectorAll(".listupd .bs").forEach((item) => {
+      console.log("item : ", item.querySelector(".type"));
+      recommendedComics.push({
+        comicThumbnail: item?.querySelector("img").getAttribute("src"),
+        comicTitle: item?.querySelector(".tt").textContent,
+        ...(item.querySelector(".type")
+          ? {
+              comicType: item?.querySelector(".type")?.textContent,
+              comicTypeLink: `/comic_type/${item
+                ?.querySelector(".type")
+                ?.textContent.toLowerCase()
+                .trim()}`,
+            }
+          : {
+              comicType: "",
+              comicTypeLink: "",
+            }),
 
-    results["chapters"] = chapters;
+        comicDetailsLink: item
+          ?.querySelector("a")
+          .getAttribute("href")
+          .replaceAll(baseUrl, ""),
+      });
+    });
+    results["recommendedComics"] = recommendedComics;
 
     return results;
   };
@@ -90,8 +152,8 @@ app.get("/manga/:comic_name", async (req, res) => {
   });
 });
 
-app.get("/ch/:chapters", (req, res) => {
-  const url = `${baseUrl}${req?.params?.chapters}`;
+app.get("/read/:comicChapters", (req, res) => {
+  const url = `${baseUrl}/${req?.params?.comicChapters}`;
   const fetchChapters = async () => {
     const responsePages = await fetchPages(url);
 
@@ -100,27 +162,44 @@ app.get("/ch/:chapters", (req, res) => {
     const images = [];
     const terbaru = [];
 
-    // getting title
-    results["titleComic"] = dom.querySelector("#Judul h1").textContent.trim();
+    // // getting title
+    results["comicTitle"] = dom.querySelector(
+      ".headpost .entry-title"
+    ).textContent;
 
     // getting image
-    dom.querySelectorAll("#Baca_Komik img").forEach((item) => {
+    dom.querySelectorAll("#readerarea img").forEach((item) => {
       images?.push({
         imagesSrc: item?.getAttribute("src"),
         imagesAlt: item?.getAttribute("alt"),
       });
     });
-
     results["images"] = images;
 
-    // getting terbaru
-    dom.querySelectorAll("#Terbaru .ls8").forEach((item) => {
-      terbaru.push({
-        terbaruImage: item?.querySelector("img").getAttribute("src"),
-        terbaruName: item?.querySelector("h4").textContent.trim(),
-        terbaruLink: item?.querySelector("a").getAttribute("href"),
-      });
-    });
+    // getting prevLink
+    results["prevLink"] = dom
+      .querySelector(".ch-prev-btn")
+      .getAttribute("href");
+    // results["prevLink"] =
+    //   dom.querySelector("a.ch-prev-btn").getAttribute("href") === "#/prev/"
+    //     ? false
+    //     : dom.querySelector(".nextprev  .ch-prev-btn").getAttribute("href");
+
+    // getting nextLink
+    results["nextLink"] =
+      dom.querySelector(".nextprev .ch-next-btn").getAttribute("href") ===
+      "#/next/"
+        ? false
+        : dom.querySelector(".nextprev .ch-next-btn").getAttribute("href");
+
+    // // getting terbaru
+    // dom.querySelectorAll("#Terbaru .ls8").forEach((item) => {
+    //   terbaru.push({
+    //     terbaruImage: item?.querySelector("img").getAttribute("src"),
+    //     terbaruTitle: item?.querySelector("h4").textContent.trim(),
+    //     terbaruLink: item?.querySelector("a").getAttribute("href"),
+    //   });
+    // });
 
     results["terbaru"] = terbaru;
 
@@ -131,5 +210,42 @@ app.get("/ch/:chapters", (req, res) => {
     res.send({ status: 200, data: response, message: "Successfully get data" });
   });
 });
+
+app.get("/cari/:s", (req, res) => {
+  const searchKey = req?.params?.s;
+  const url = `https://data.komiku.id/cari/?post_type=manga&s=${searchKey}`;
+
+  const fetchDataSearch = async () => {
+    const responsePages = await fetchPages(url);
+
+    const dom = new JSDOM(responsePages).window.document;
+
+    const results = [];
+
+    dom.querySelectorAll(".daftar .bge").forEach((item) => {
+      results.push({
+        comicTitle: {
+          englishTitle: item.querySelector("h3").textContent.trim(),
+          indonesiaTitle: item.querySelector("span.judul2").textContent.trim(),
+        },
+        comicThumbnail: item.querySelector("img").getAttribute("src"),
+        comicLink: item
+          .querySelector("a")
+          .getAttribute("href")
+          ?.replaceAll(baseUrl, "/"),
+      });
+    });
+
+    return results;
+  };
+
+  fetchDataSearch().then((response) => {
+    res.send({ status: 200, data: response, message: "Successfully get data" });
+  });
+});
+
+app.get("*/*", (req, res) =>
+  res.send({ status: 404, message: "Route not found" })
+);
 
 app.listen(8000);

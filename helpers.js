@@ -1,9 +1,9 @@
 const axios = require("axios");
 const { JSDOM } = require("jsdom");
 
-const url = "https://komiku.id/ch/boruto-chapter-78/";
+// const url = "https://komiku.id/ch/boruto-chapter-78/";
 
-const fetchPages = async (urlPages = url) => {
+const fetchPages = async (urlPages = "") => {
   try {
     const { data } = await axios.get(urlPages);
     return data;
