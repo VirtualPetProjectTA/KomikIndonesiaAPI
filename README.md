@@ -38,18 +38,24 @@ This API based on this [website](https://komikstation.co/)
     </tr>
     <tr>
         <td>
-            /
+            /genres/:genreTypes
         </td>
         <td>
-            For getting trending comics
+            [action, shounen, ecchi, horror]
+        </td>
+        <td>
+            For getting genres comics
         </td>
     </tr>
     <tr>
         <td>
-            /
+            /comic_type/:comic_type
         </td>
         <td>
-            For getting trending comics
+            [manhua, manga, manhwa]
+        </td>
+        <td>
+            For getting comic types
         </td>
     </tr>
 </table>
